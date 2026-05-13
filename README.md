@@ -172,16 +172,156 @@ python scripts/latex_optimizer.py --input thesis.zip --engine xelatex --verbose
 - Remove duplicate package imports (identical options)
 - Add non-breaking spaces before `\ref`, `\cite`, `\autoref`
 
-## Project Structure
+## Technical Architecture
+
+### System Overview
+
+The LaTeX Typeset Optimizer follows a modular, pipeline-based architecture that processes LaTeX files through multiple stages:
 
 ```
-latex-typeset-optimizer/
-├── scripts/           # Main Python scripts
-├── configs/          # Configuration files
-├── references/       # Documentation
-├── tests/            # Test fixtures
-└── agents/           # Agent configurations
+┌─────────────────────────────────────────────────────────────────┐
+│                      INPUT LAYER                                │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │  .tex File  │  │  .zip (OL)  │  │  .log File  │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+└─────────┼────────────────┼────────────────┼─────────────────────┘
+          │                │                │
+          ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      MODE ROUTER                                │
+│    Auto-detects input type → selects processing mode            │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+          ┌────────────────────┼────────────────────┐
+          ▼                    ▼                    ▼
+    ┌───────────┐       ┌───────────┐       ┌───────────┐
+    │  SINGLE   │       │  PROJECT  │       │   LOG     │
+    │   FILE    │       │           │       │  REVIEW   │
+    └─────┬─────┘       └─────┬─────┘       └─────┬─────┘
+          │                   │                   │
+          └───────────────────┼───────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     PROCESSING PIPELINE                         │
+│                                                                 │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │ Intake   │ →  │ Detect   │ →  │ Format   │ →  │ Lint     │  │
+│  │          │    │          │    │          │    │          │  │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│         ↓                                                      │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │ Compile  │ →  │ LogParse │ →  │ Classify │ →  │ Fix      │  │
+│  │          │    │          │    │          │    │          │  │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘  │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      OUTPUT LAYER                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │ optimized   │  │ report.md   │  │ patch.diff  │             │
+│  │ .tex/.zip   │  │             │  │             │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+### Core Components
+
+| Component | Description | Key Responsibilities |
+|-----------|-------------|---------------------|
+| **IntakeProcessor** | Input handling | Accepts .tex, .zip, .log, or directory inputs |
+| **ProjectDetector** | Project analysis | Identifies main.tex, engine type, package dependencies |
+| **ToolManager** | Tool selection | Selects appropriate tools based on project requirements |
+| **TexFormatter** | Code formatting | Applies latexindent formatting rules |
+| **TexLinter** | Code quality | Runs chktex/lacheck for linting |
+| **TexCompiler** | Compilation | Executes latexmk with detected engine |
+| **LogParser** | Log analysis | Parses compilation logs for errors/warnings |
+| **IssueClassifier** | Issue categorization | Classifies issues by severity and category |
+| **SafeFixer** | Auto-fixes | Applies safe fixes (whitespace, formatting) |
+| **DiffGenerator** | Diff generation | Creates unified diff between original and optimized |
+| **ReportGenerator** | Report creation | Generates Markdown report and JSON summary |
+| **OutputPackager** | Output packaging | Packages project as zip file |
+
+### Scripts Structure
+
+```
+scripts/
+├── latex_optimizer.py    # Main entry point, orchestrates workflow
+├── intake.py             # Input processing (unzip, copy)
+├── detect_project.py     # Project structure detection
+├── detect_main_tex.py    # Main .tex file identification
+├── tool_check.py         # External tool availability check
+├── format_tex.py         # LaTeX formatting (latexindent)
+├── lint_tex.py           # Linting (chktex)
+├── compile_tex.py        # Compilation (latexmk)
+├── parse_log.py          # Log file parsing
+├── classify_issues.py    # Issue classification
+├── apply_safe_fixes.py   # Safe fix application
+├── diff_utils.py         # Diff generation
+├── make_report.py        # Report generation
+├── package_output.py     # Output packaging
+└── models.py             # Data models (Pydantic)
+```
+
+### Data Models
+
+**Key Pydantic Models:**
+- `OptimizerConfig`: Configuration options (input, mode, fix_level, etc.)
+- `ProjectInfo`: Project metadata (main_tex, tex_files, engine, packages)
+- `ToolSet`: Selected external tools (formatter, engine, linters)
+- `Issue`: Individual issue (severity, category, message, recommendation)
+- `IssueSummary`: Aggregated issues (counts by severity, all issues)
+- `FixResult`: Fix application results (applied, failed, modified)
+- `OptimizationResult`: Complete result (mode_used, project_info, issue_summary, fix_result)
+
+### Engine Detection Logic
+
+```
+Input: .tex file header
+├─ %!TEX program = xelatex → use xelatex
+├─ %!TEX program = lualatex → use lualatex
+├─ %!TEX program = pdflatex → use pdflatex
+├─ ctex/xeCJK/luatexja/kotex → use xelatex
+├─ fontspec → use xelatex or lualatex
+├─ pstricks → use xelatex or latex+dvips
+└─ default → use pdflatex
+```
+
+### Issue Severity Classification
+
+| Severity | Definition | Examples |
+|----------|------------|----------|
+| **BLOCKING** | Prevents compilation | Undefined control sequences, missing packages |
+| **HIGH** | Critical issues | Undefined references/citations |
+| **MEDIUM** | May affect output quality | Overfull boxes |
+| **LOW** | Minor issues | Underfull boxes, spacing issues |
+| **INFO** | Style suggestions | Formatting improvements |
+
+### Workflow Details
+
+#### Single File Mode
+1. Copy input file to temporary workspace
+2. Detect engine and packages from header
+3. Format using latexindent
+4. Lint using chktex
+5. Compile with latexmk
+6. Parse log for errors/warnings
+7. Classify issues by severity
+8. Apply safe fixes
+9. Generate diff and report
+10. Output optimized file
+
+#### Project Mode
+1. Unzip Overleaf project to workspace
+2. Identify main.tex and build dependency graph
+3. Format all .tex files
+4. Lint all .tex files
+5. Full compilation with bibliography
+6. Parse compilation log
+7. Classify all issues
+8. Apply safe fixes to all files
+9. Generate project-wide diff
+10. Package as optimized-project.zip
 
 ## License
 
