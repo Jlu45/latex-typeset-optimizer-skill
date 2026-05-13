@@ -1,0 +1,56 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\title{A Clean LaTeX Document}
+\author{Author Name}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This is a clean LaTeX document with no issues. It compiles correctly and follows good typesetting practices.
+
+As shown in Figure~\ref{fig:example}, the results are consistent with our hypothesis. Previous work~\cite{smith2020} also supports this finding.
+
+\section{Methods}
+
+We used the standard approach described in~\cite{jones2019}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{example.png}
+  \caption{An example figure.}
+  \label{fig:example}
+\end{figure}
+
+\section{Results}
+
+The results are shown in Table~\ref{tab:results}.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{lcc}
+    \hline
+    Method & Accuracy & Time \\
+    \hline
+    A & 0.95 & 10s \\
+    B & 0.92 & 5s \\
+    \hline
+  \end{tabular}
+  \caption{Results comparison.}
+  \label{tab:results}
+\end{table}
+
+\section{Conclusion}
+
+In conclusion, our method achieves the best results.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

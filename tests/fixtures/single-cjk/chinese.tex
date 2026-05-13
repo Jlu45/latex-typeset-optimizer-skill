@@ -1,0 +1,54 @@
+\documentclass{article}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usepackage{graphicx}
+
+\title{中文LaTeX文档示例}
+\author{作者姓名}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{引言}
+
+这是一份包含中文内容的LaTeX文档。本文档使用ctex宏包来处理中文排版。
+
+如第~\ref{sec:method}节所述，我们采用了标准方法。
+
+\section{方法}
+\label{sec:method}
+
+我们使用了文献~\cite{zhang2020}中描述的方法。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{example.png}
+  \caption{示例图片}
+  \label{fig:example}
+\end{figure}
+
+\section{结果}
+
+实验结果如表~\ref{tab:results}所示。
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{lcc}
+    \hline
+    方法 & 准确率 & 时间 \\
+    \hline
+    方法A & 0.95 & 10秒 \\
+    方法B & 0.92 & 5秒 \\
+    \hline
+  \end{tabular}
+  \caption{结果对比}
+  \label{tab:results}
+\end{table}
+
+\section{结论}
+
+综上所述，我们的方法取得了最佳效果。
+
+\end{document}

@@ -1,0 +1,63 @@
+defaultIndent: "    "
+
+lookForAlignDelims:
+  align: 1
+  align*: 1
+  tabular: 1
+  tabular*: 1
+  tabularx: 1
+  longtable: 1
+  array: 1
+  matrix: 1
+  pmatrix: 1
+  bmatrix: 1
+  Bmatrix: 1
+  vmatrix: 1
+  Vmatrix: 1
+  cases: 1
+
+indentAfterHeadings:
+  part:
+    indentAfterThisHeading: 0
+    level: 1
+  chapter:
+    indentAfterThisHeading: 0
+    level: 2
+  section:
+    indentAfterThisHeading: 0
+    level: 3
+  subsection:
+    indentAfterThisHeading: 0
+    level: 4
+  subsubsection:
+    indentAfterThisHeading: 0
+    level: 5
+  paragraph:
+    indentAfterThisHeading: 0
+    level: 6
+  subparagraph:
+    indentAfterThisHeading: 0
+    level: 7
+
+indentAfterItems:
+  itemize: 1
+  enumerate: 1
+  description: 1
+  list: 1
+
+noAdditionalIndent:
+  document: 1
+  verbatim: 1
+  minted: 1
+  lstlisting: 1
+  alltt: 1
+
+removeTrailingWhitespace:
+  beforeProcessing: 1
+  afterProcessing: 1
+
+modifyLineBreaks:
+  textWrapOptions:
+    columns: 80
+    perCodeBlockBasis: 1
+  condenseMultipleBlankLinesInto: 1

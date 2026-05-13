@@ -1,0 +1,35 @@
+This is pdfTeX, Version 3.1415926535-2.6-1.40.24 (TeX Live 2022) (preloaded format=pdflatex)
+ restricted \write18 enabled.
+entering extended mode
+(./test.tex
+LaTeX2e <2022-06-01>
+(/usr/share/texlive/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2021/10/04 v1.4n Standard LaTeX document class)
+(/usr/share/texlive/texmf-dist/tex/latex/base/size10.clo))
+
+! Undefined control sequence.
+l.15 \undefinedcommand
+
+! LaTeX Error: File `nonexistent.sty' not found.
+
+Type X to quit or <RETURN> to proceed,
+or enter new name. (Default extension: sty)
+
+LaTeX Warning: Reference `fig:missing' on page 1 undefined on input line 10.
+
+LaTeX Warning: Citation `nonexistent2020' on page 1 undefined on input line 12.
+
+Overfull \hbox (15.0pt too wide) in paragraph at lines 20--22
+[]\OT1/cmr/m/n/10 This is a very long line that will def-i-nite-ly cause an
+over-full hbox warn-ing
+
+Underfull \hbox (badness 10000) in paragraph at lines 25--27
+
+[1{/usr/share/texlive/texmf-dist/fonts/map/pdftex/updmap/pdftex.map}] (./test.aux)
+
+LaTeX Warning: There were undefined references.
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+ )
+(see the transcript file for additional information)</pre>
+</output>

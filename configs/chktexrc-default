@@ -1,0 +1,28 @@
+CmdLine {
+  -n 1
+  -n 2
+  -n 3
+  -n 13
+  -n 36
+}
+
+Silent {
+  \begin
+  \end
+  \item
+  \label
+  \ref
+  \cite
+  \autoref
+  \cref
+  \Cref
+  \eqref
+}
+
+TabSize {
+  4
+}
+
+IndentSpace {
+  4
+}

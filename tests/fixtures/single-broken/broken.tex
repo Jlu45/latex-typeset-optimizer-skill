@@ -1,0 +1,38 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{nonexistent-package}
+
+\title{A Broken LaTeX Document}
+\author{Author Name}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This document has several issues.
+
+As shown in Figure \ref{fig:missing}, the results are consistent.
+
+But the label fig:missing is never defined.
+
+Also \undefinedcommand is used here.
+
+\begin{itemize}
+\item First item
+\item Second item with trailing spaces   
+\item Third item
+\end{itemize}
+
+Some text with undefined citation~\cite{nonexistent2020}.
+
+\section{Methods}
+
+We used the approach described in \cite{jones2019}.
+
+
+
+Overfull box content: This is a very long line that will definitely cause an overfull hbox warning because it exceeds the text width by a significant amount of text that keeps going and going and going and going and going.
+
+\end{document}

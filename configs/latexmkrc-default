@@ -1,0 +1,6 @@
+$pdflatex = 'pdflatex -interaction=nonstopmode -synctex=1 %O %S';
+$xelatex = 'xelatex -interaction=nonstopmode -synctex=1 %O %S';
+$lualatex = 'lualatex -interaction=nonstopmode -synctex=1 %O %S';
+$bibtex_use = 1.5;
+$max_repeat = 5;
+$pdf_mode = 1;
