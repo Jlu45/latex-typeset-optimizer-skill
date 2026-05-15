@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from models import LogAnalysis, LintResult, Issue, IssueSummary, Severity
+from models import Diagnostic, LogAnalysis, LintResult, Issue, IssueSummary, Severity
 
 
 ISSUE_CATEGORIES = {
@@ -48,57 +48,98 @@ ISSUE_CATEGORIES = {
     }
 }
 
+CATEGORY_SOURCE_MAP = {
+    'compile-error': 'latexmk',
+    'undefined-control-sequence': 'latexmk',
+    'missing-package': 'latexmk',
+    'undefined-reference': 'latexmk',
+    'undefined-citation': 'latexmk',
+    'overfull-box': 'latexmk',
+    'underfull-box': 'latexmk',
+    'spacing-issue': 'latexmk',
+    'style-issue': 'latexmk',
+    'compile-warning': 'latexmk',
+    'font-warning': 'latexmk',
+}
+
+CATEGORY_FIXABLE = {
+    'overfull-box': True,
+    'underfull-box': True,
+    'undefined-reference': True,
+    'undefined-citation': True,
+    'compile-warning': True,
+    'spacing-issue': True,
+}
+
+CATEGORY_SAFE_FIX = {
+    'overfull-box': True,
+    'underfull-box': True,
+}
+
 
 class IssueClassifier:
     def classify(self, log_analysis: LogAnalysis,
                  lint_results: List[LintResult]) -> IssueSummary:
         issues = []
+        diagnostics = []
 
         for error in log_analysis.errors:
-            issues.append(self._classify_error(error))
+            issue = self._classify_error(error)
+            issues.append(issue)
+            diagnostics.append(self._issue_to_diagnostic(issue))
 
         for warning in log_analysis.warnings:
-            issues.append(self._classify_warning(warning))
+            issue = self._classify_warning(warning)
+            issues.append(issue)
+            diagnostics.append(self._issue_to_diagnostic(issue))
 
         for box in log_analysis.overfull_boxes:
             line_num = self._extract_line_number(box)
-            issues.append(Issue(
+            issue = Issue(
                 severity=Severity.MEDIUM,
                 category='overfull-box',
                 message=f'Overfull box: {box}',
                 line=line_num,
                 recommendation='Consider adjusting line width or using \\sloppy'
-            ))
+            )
+            issues.append(issue)
+            diagnostics.append(self._issue_to_diagnostic(issue))
 
         for box in log_analysis.underfull_boxes:
             line_num = self._extract_line_number(box)
-            issues.append(Issue(
+            issue = Issue(
                 severity=Severity.LOW,
                 category='underfull-box',
                 message=f'Underfull box: {box}',
                 line=line_num,
                 recommendation='Consider adjusting spacing or using \\emergencystretch'
-            ))
+            )
+            issues.append(issue)
+            diagnostics.append(self._issue_to_diagnostic(issue))
 
         for ref in log_analysis.undefined_refs:
-            issues.append(Issue(
+            issue = Issue(
                 severity=Severity.HIGH,
                 category='undefined-reference',
                 message=f'Undefined reference: {ref}',
                 recommendation='Check if the label exists or run compilation again'
-            ))
+            )
+            issues.append(issue)
+            diagnostics.append(self._issue_to_diagnostic(issue))
 
         for cite in log_analysis.undefined_cites:
-            issues.append(Issue(
+            issue = Issue(
                 severity=Severity.HIGH,
                 category='undefined-citation',
                 message=f'Undefined citation: {cite}',
                 recommendation='Check bibliography entries or run bibtex/biber'
-            ))
+            )
+            issues.append(issue)
+            diagnostics.append(self._issue_to_diagnostic(issue))
 
         for lint_result in lint_results:
             for finding in lint_result.findings:
-                issues.append(Issue(
+                issue = Issue(
                     severity=self._map_lint_severity(finding.severity),
                     category=f'lint-{lint_result.linter}',
                     message=finding.message,
@@ -107,7 +148,9 @@ class IssueClassifier:
                     recommendation=self._get_lint_recommendation(
                         lint_result.linter, finding
                     )
-                ))
+                )
+                issues.append(issue)
+                diagnostics.append(self._lint_to_diagnostic(lint_result, finding, issue))
 
         issues.sort(key=lambda i: (i.severity.value, i.line or 0))
 
@@ -116,7 +159,38 @@ class IssueClassifier:
         return IssueSummary(
             compile_status=log_analysis.no_errors,
             issue_counts=dict(counts),
-            issues=issues
+            issues=issues,
+            diagnostics=diagnostics
+        )
+
+    def _issue_to_diagnostic(self, issue: Issue) -> Diagnostic:
+        source = CATEGORY_SOURCE_MAP.get(issue.category, 'latexmk')
+        return Diagnostic(
+            source=source,
+            rule=issue.rule,
+            severity=issue.severity,
+            file=issue.file,
+            line=issue.line,
+            column=issue.column,
+            message=issue.message,
+            suggestion=issue.recommendation,
+            fixable=CATEGORY_FIXABLE.get(issue.category, False),
+            safe_fix=CATEGORY_SAFE_FIX.get(issue.category, False),
+        )
+
+    def _lint_to_diagnostic(self, lint_result: LintResult, finding, issue: Issue) -> Diagnostic:
+        rule_id = finding.rule_id if finding.rule_id else f"{lint_result.linter}/{issue.category}"
+        return Diagnostic(
+            source=lint_result.linter,
+            rule=rule_id,
+            severity=issue.severity,
+            file=issue.file,
+            line=finding.line,
+            column=finding.column,
+            message=finding.message,
+            suggestion=issue.recommendation,
+            fixable=True,
+            safe_fix=False,
         )
 
     def _classify_error(self, error: str) -> Issue:

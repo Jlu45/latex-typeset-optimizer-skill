@@ -11,6 +11,7 @@ from typing import Dict, Optional
 
 from models import (
     Mode, Severity, FixLevel, CompilePolicy, WritePolicy,
+    BuildEnvironment, EnvironmentInfo, SecurityNote,
     OptimizerConfig, OptimizationResult, ProjectWorkspace,
     ProjectInfo, ToolSet, IssueSummary, FixResult, CompileResult
 )
@@ -26,6 +27,11 @@ from apply_safe_fixes import SafeFixer
 from diff_utils import DiffGenerator
 from package_output import OutputPackager
 from make_report import ReportGenerator
+from recipes import RecipeManager
+from build_env import BuildEnvManager
+from config_loader import ConfigLoader
+from sarif_output import SarifGenerator
+from diagnostics_output import DiagnosticsGenerator
 
 
 MODE_MAPPING = {
@@ -107,6 +113,10 @@ class LatexOptimizer:
         self.diff_gen = DiffGenerator()
         self.reporter = ReportGenerator()
         self.packager = OutputPackager()
+        self.recipe_manager = RecipeManager()
+        self.build_env_manager = BuildEnvManager(config)
+        self.config_loader = ConfigLoader()
+        self.recipe = None
 
     def run(self) -> OptimizationResult:
         result = OptimizationResult()
@@ -121,13 +131,33 @@ class LatexOptimizer:
         if self.config.verbose:
             print(f"[INFO] Workspace: {workspace.root}")
 
+        result.security_notes = list(workspace.security_notes)
+
+        loaded_config = self.config_loader.load(workspace.root)
+        self.config = self.config_loader.apply_to_config(loaded_config, self.config)
+
+        if self.config.config_file:
+            self.recipe_manager.load_from_yaml(self.config.config_file)
+
+        custom_recipes = self.config_loader.get_recipe_definitions(loaded_config)
+        for name, recipe in custom_recipes.items():
+            self.recipe_manager.recipes[name] = recipe
+
+        env_info = self.build_env_manager.detect_environment()
+        result.environment_info = env_info
+
         project_info = self.detector.analyze(workspace)
         result.project_info = project_info
+
+        project_info.environment_info = env_info
+        project_info.project_graph = self.detector.build_project_graph(project_info, workspace.root)
 
         tools = self.tool_manager.select_tools(project_info)
 
         if self.config.engine:
             tools.engine = self.config.engine
+
+        self.recipe = self.recipe_manager.select_recipe(project_info)
 
         self.formatter = TexFormatter(
             tool=tools.formatter,
@@ -152,6 +182,17 @@ class LatexOptimizer:
 
         return result
 
+    def _compile(self, tex_path, compile_policy, workspace=None):
+        if compile_policy == CompilePolicy.SKIP:
+            return CompileResult(skipped=True)
+        if self.config.build_env == BuildEnvironment.DOCKER:
+            work_dir = workspace.root if workspace else Path(tex_path).parent
+            return self.build_env_manager.compile_with_docker(tex_path, self.recipe, work_dir)
+        if self.config.build_env == BuildEnvironment.TECTONIC:
+            work_dir = workspace.root if workspace else Path(tex_path).parent
+            return self.build_env_manager.compile_with_tectonic(tex_path, work_dir)
+        return self.compiler.compile(tex_path, compile_policy)
+
     def _optimize_single(self, workspace, project_info, tools, result):
         tex_path = project_info.main_tex
         if not tex_path or not tex_path.exists():
@@ -163,9 +204,7 @@ class LatexOptimizer:
 
         lint_results = self.linter.lint(tex_path, tools.linters)
 
-        compile_result = self.compiler.compile(
-            tex_path, self.config.compile_policy
-        )
+        compile_result = self._compile(tex_path, self.config.compile_policy, workspace)
         result.compile_result = compile_result
 
         log_analysis = LogAnalysis()
@@ -194,9 +233,7 @@ class LatexOptimizer:
         log_analysis = LogAnalysis()
 
         if project_info.main_tex and project_info.main_tex.exists():
-            compile_result = self.compiler.compile(
-                project_info.main_tex, self.config.compile_policy
-            )
+            compile_result = self._compile(project_info.main_tex, self.config.compile_policy, workspace)
             result.compile_result = compile_result
 
             if compile_result and compile_result.log_analysis:
@@ -240,9 +277,7 @@ class LatexOptimizer:
 
         log_analysis = LogAnalysis()
         if project_info.main_tex and project_info.main_tex.exists():
-            compile_result = self.compiler.compile(
-                project_info.main_tex, self.config.compile_policy
-            )
+            compile_result = self._compile(project_info.main_tex, self.config.compile_policy, workspace)
             result.compile_result = compile_result
 
             if compile_result and compile_result.log_analysis:
@@ -286,6 +321,16 @@ class LatexOptimizer:
                 result.fix_result or FixResult(),
                 mode
             )
+
+            if result.security_notes:
+                security_section = "\n## Security Notes\n"
+                for note in result.security_notes:
+                    security_section += f"- **[{note.level}]** {note.message}"
+                    if note.file:
+                        security_section += f" ({note.file})"
+                    security_section += "\n"
+                report += security_section
+
             report_path = output_dir / "report.md"
             report_path.write_text(report, encoding='utf-8')
             result.output_files['report'] = report_path
@@ -298,6 +343,31 @@ class LatexOptimizer:
                     encoding='utf-8'
                 )
                 result.output_files['issue-summary'] = summary_path
+
+        if result.issue_summary and result.issue_summary.diagnostics:
+            diag_gen = DiagnosticsGenerator()
+            diag_path = output_dir / "diagnostics.json"
+            diag_gen.write(result.issue_summary.diagnostics, diag_path)
+            result.output_files['diagnostics'] = diag_path
+
+            sarif_gen = SarifGenerator()
+            sarif_path = output_dir / "sarif.json"
+            sarif_gen.write(result.issue_summary.diagnostics, sarif_path)
+            result.output_files['sarif'] = sarif_path
+
+        if result.project_info:
+            graph_data = self.detector.generate_project_graph_json(result.project_info)
+            if graph_data:
+                graph_path = output_dir / "project-graph.json"
+                graph_path.write_text(
+                    json.dumps(graph_data, ensure_ascii=False, indent=2),
+                    encoding='utf-8'
+                )
+                result.output_files['project-graph'] = graph_path
+
+        if result.environment_info:
+            self.build_env_manager.write_environment_json(result.environment_info, output_dir)
+            result.output_files['environment'] = output_dir / "environment.json"
 
         if mode == Mode.SINGLE_FILE and result.project_info and result.project_info.main_tex:
             tex_path = result.project_info.main_tex
@@ -407,6 +477,35 @@ def parse_args() -> argparse.Namespace:
         "--user-input", default="",
         help="Original user input for intent detection"
     )
+    parser.add_argument(
+        "--build-env", default="local",
+        choices=["local", "docker", "tectonic"],
+        help="Build environment (default: local)"
+    )
+    parser.add_argument(
+        "--docker-image", default=None,
+        help="Docker image for compilation"
+    )
+    parser.add_argument(
+        "--texlive-version", default=None,
+        help="TeX Live version"
+    )
+    parser.add_argument(
+        "--recipe", default=None,
+        help="Build recipe name"
+    )
+    parser.add_argument(
+        "--config-file", default=None,
+        help="Path to configuration file"
+    )
+    parser.add_argument(
+        "--compile-timeout", type=int, default=300,
+        help="Compilation timeout in seconds (default: 300)"
+    )
+    parser.add_argument(
+        "--enable-shell-escape", action="store_true",
+        help="Enable shell-escape for compilation"
+    )
     return parser.parse_args()
 
 
@@ -440,6 +539,12 @@ def main():
         "patch-only": WritePolicy.PATCH_ONLY
     }
 
+    build_env_map = {
+        "local": BuildEnvironment.LOCAL,
+        "docker": BuildEnvironment.DOCKER,
+        "tectonic": BuildEnvironment.TECTONIC
+    }
+
     config = OptimizerConfig(
         input=args.input,
         mode=mode_map[args.mode],
@@ -449,7 +554,14 @@ def main():
         write_policy=write_policy_map[args.write_policy],
         engine=args.engine,
         verbose=args.verbose,
-        user_input=args.user_input
+        user_input=args.user_input,
+        build_env=build_env_map[args.build_env],
+        docker_image=args.docker_image,
+        texlive_version=args.texlive_version,
+        recipe_name=args.recipe,
+        config_file=args.config_file,
+        compile_timeout=args.compile_timeout,
+        enable_shell_escape=args.enable_shell_escape
     )
 
     optimizer = LatexOptimizer(config)

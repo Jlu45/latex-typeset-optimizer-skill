@@ -1,6 +1,8 @@
 # LaTeX 排版优化工具
 
-一个多模式的 LaTeX 排版优化工具，支持单文件优化、Overleaf/LaTeX 项目优化、编译日志分析和只读审查报告。
+> 正在演进为 **LaTeX 项目诊断与构建编排器**
+
+一个多模式的 LaTeX 排版优化工具，支持单文件优化、Overleaf/LaTeX 项目优化、编译日志分析和只读审查报告。下一阶段的重点是将工具从安全修复工具升级为完整的诊断与构建编排系统，具备更强的项目图谱、标准化的诊断、可复现的编译环境，以及 CI/IDE 接入能力。
 
 ## 功能特性
 
@@ -147,6 +149,26 @@ scripts/
 | **LOW** | 次要问题 | 内容不足盒子、间距问题 |
 | **INFO** | 样式建议 | 格式化改进 |
 
+### 安全修复边界
+
+**在 safe 级别自动应用:**
+- 去除尾部空白字符
+- 规范化连续空行（最多 2 行）
+- 确保文件末尾有换行符
+- 通过 latexindent 重新缩进环境
+- 移除重复的包导入（相同选项）
+- 在 `\ref`、`\cite`、`\autoref` 前添加不间断空格
+
+**永不自动修复:**
+- 数学表达式重写
+- 文档类更改
+- 宏包替换
+- 参考文献后端更改
+- 引擎更改
+- 启用 shell escape
+- 出版商模板结构修改
+- 语义文本编辑
+
 ### 工作流程详情
 
 #### 单文件模式
@@ -172,6 +194,129 @@ scripts/
 8. 对所有文件应用安全修复
 9. 生成项目范围的差异
 10. 打包为 optimized-project.zip
+
+## 相关项目与借鉴
+
+| 项目 | 星数 / 定位 | 可借鉴点 |
+|------|-------------|----------|
+| **Overleaf** | ~17.7k，开源在线协作 LaTeX 编辑器 | 项目级思路；沙箱编译是核心风险（社区版缺失） |
+| **LaTeX Workshop** | ~12.1k，VS Code LaTeX 全功能扩展 | root 文件发现、构建 recipes、多文件依赖解析、自动构建、问题面板、可配置 formatter/linter |
+| **VimTeX** | ~6.3k，Vim/Neovim LaTeX 工作流插件 | 透明可调试：显示实际执行命令和编译输出 |
+| **Tectonic** | ~4.8k，现代化自包含 TeX/LaTeX 引擎 | 可复现构建：自动下载支持文件、bundle 技术、自动 TeX/BibTeX 循环 |
+| **TexLab** | ~2k，LaTeX LSP | 诊断服务化：build-on-save、.fls 项目检测、ChkTeX on open/edit、诊断 allow/ignore 模式 |
+| **latex-action** | ~1.4k，GitHub Action 编译 LaTeX | CI 能力：容器化 TeXLive、固定版本、Alpine/Debian、多引擎、自定义字体/包、pre/post 脚本 |
+| **latexindent.pl** | ~1k，LaTeX 格式化器 | 已在用；可进一步利用 YAML 配置、文本换行、段落处理、正则替换 |
+| **TeXtidote** | ~1k，LaTeX 拼写/语法/风格检查 | 内容层审查：未引用的图片、标题大小写、LanguageTool 集成映射回 LaTeX 源位置 |
+| **tex-fmt** | ~802，Rust 高性能格式化器 | 性能与低配置：.tex/.bib/.cls/.sty，极快、少配置、命令行友好 |
+| **arara** | ~414，基于文档内指令的 TeX 自动化工具 | 文档内构建指令：`% arara: pdflatex`，自定义规则 |
+
+## 演进路线图
+
+下一阶段将工具从安全修复优化器升级为 **LaTeX 项目诊断与构建编排器**。
+
+### v0.2：稳定性优先
+
+**P0：安全沙箱编译与 zip/path 防护**
+- 解压 zip 时防止 Zip Slip、绝对路径、`..`、符号链接逃逸
+- 默认禁用 shell escape；发现 `minted`/`gnuplottex` 时只报告，不自动开启
+- 编译使用临时目录、只读源副本、资源限制、超时限制
+- 禁止读取用户主目录、环境变量、SSH key 等敏感路径
+- 对项目内可执行文件、Makefile、pre/post 脚本默认禁用，除非用户显式开启
+- 报告中增加 `security-notes` 区块
+
+**P0：项目图谱与 root 检测重构**
+- 支持 magic comments：`% !TEX root`、`% !TEX program`、`% !LW recipe`、`% arara:`
+- 解析 `\input`、`\include`、`\subfile`、`\import`、`\bibliography`、`\addbibresource`、`\graphicspath`
+- 编译后读取 `.fls`，用真实输入/输出文件修正静态依赖图
+- 输出 `project-graph.json`，标注 root、子文件、bib、图片、cls/sty、本地包、外部资源
+
+**P0：统一诊断模型**
+- 标准化诊断模型，包含 `source`、`rule`、`severity`、`file`、`line`、`column`、`message`、`suggestion`、`fixable`、`safe_fix`
+- 输出：`issue-summary.json`、`diagnostics.json`、`report.md`、`sarif.json`（GitHub Code Scanning）、可选 `annotations.md`（PR 评论）
+
+**P1：双格式化后端**
+- 默认：`latexindent`（兼容性好、YAML 可调）
+- 快速模式：`tex-fmt`（适合大项目或 CI）
+- 只格式化变更文件，避免全项目 diff 过大
+- 幂等性检查：格式化两次 diff 应为空
+- 跳过 `minted`、`lstlisting`、`verbatim`、自定义 verbatim 环境
+- 输出"格式化风险提示"：修改行数、是否触及数学环境、是否触及模板文件
+
+**P1：配置文件**
+- `.latex-optimizer.yaml` 用于项目级设置
+
+### v0.3：生态接入
+
+**P1：构建 Recipes 系统**
+- 支持可配置的构建 recipes（类似 LaTeX Workshop）：
+  ```yaml
+  recipes:
+    default: latexmk-pdf
+    latexmk-pdf:
+      tools:
+        - latexmk -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+    pdflatex-bibtex:
+      tools:
+        - pdflatex
+        - bibtex
+        - pdflatex
+        - pdflatex
+  ```
+- 自动检测：`.latexmkrc`、`latexmkrc`、arara 指令、biber/bibtex、makeindex/xindy、glossaries
+- 报告 `minted` 需要 shell escape，但不自动开启
+
+**P1：Docker / 固定 TeXLive / Tectonic**
+- 三种构建环境：
+
+| 模式 | 适用场景 |
+|------|----------|
+| `local` | 用户本机已有 TeXLive/MiKTeX |
+| `docker` | CI、投稿复现、隔离编译 |
+| `tectonic` | 快速、可复现、自动拉取依赖的单文档构建 |
+
+- 支持 `--texlive-version 2024/2025/2026/latest`
+- 支持 `--docker-image`
+- 编译前记录 `pdflatex --version`、`latexmk --version`、`biber --version`
+- 输出 `environment.json`
+- 缓存 TeXLive/Tectonic bundle
+- 保留 `compile-before.log` / `compile-after.log`
+
+**P1：CI / Pre-commit / GitHub Action 模板**
+- `.github/workflows/latex-optimizer.yml`
+- `.pre-commit-hooks.yaml`
+- `latex-optimizer-action`
+- PR 评论模板
+- SARIF 上传示例
+- Artifact 上传：PDF、报告、diff、issue-summary
+
+### v0.4：智能审查
+
+**P2：内容级诊断**
+- 未引用的 figure/table/listing
+- 重复 label
+- 未定义 label/citation
+- 未使用 bib entries
+- 标题大小写检查
+- 拼写/语法检查（TeXtidote / LanguageTool 集成）
+- 中英文标点与空格检查
+- CJK 文档引擎/字体建议
+- 摘要、关键词、参考文献、附录结构检查
+
+**P2：高级报告**
+- HTML 报告生成
+- PR review 注释
+- 回归测试语料：Overleaf zip、arXiv 源码、CJK 论文、出版商模板
+- 格式化幂等性与误改测试
+
+### 最推荐先做的 5 个改动
+
+| 优先级 | 改动 | 理由 |
+|--------|------|------|
+| **P0** | 安全沙箱 + zip/path 防护 | 项目模式的底线，尤其是处理用户上传 zip |
+| **P0** | 项目图谱 + root 检测重构 | 直接提升复杂 Overleaf 项目成功率 |
+| **P0** | 统一 diagnostics.json / SARIF | 让报告、CI、IDE、PR 评论都能复用同一套结果 |
+| **P1** | Recipes 构建系统 | 支持 latexmk、pdflatex→bibtex→pdflatex、biber、makeindex、arara |
+| **P1** | Docker/Tectonic 可复现构建 | 解决"我这里能编译、你那里不能编译"的 LaTeX 经典问题 |
 
 ## 安装
 
@@ -299,15 +444,6 @@ python scripts/latex_optimizer.py --input thesis.zip --engine xelatex --verbose
 | `--write-policy` | 写入策略：report-only, copy, patch-only | copy |
 | `--engine` | 强制指定引擎：pdflatex, xelatex, lualatex | 自动检测 |
 | `--verbose` | 详细输出 | false |
-
-## 安全修复（在 safe 级别自动应用）
-
-- 去除尾部空白字符
-- 规范化连续空行（最多 2 行）
-- 确保文件末尾有换行符
-- 通过 latexindent 重新缩进环境
-- 移除重复的包导入（相同选项）
-- 在 `\ref`、`\cite`、`\autoref` 前添加不间断空格
 
 ## 许可证
 

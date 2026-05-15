@@ -50,6 +50,65 @@ class InputType(Enum):
     TEXT = "text"
 
 
+class BuildEnvironment(Enum):
+    LOCAL = "local"
+    DOCKER = "docker"
+    TECTONIC = "tectonic"
+
+
+@dataclass
+class SecurityNote:
+    level: str = "warning"
+    category: str = ""
+    message: str = ""
+    file: Optional[str] = None
+
+
+@dataclass
+class Diagnostic:
+    source: str = ""
+    rule: Optional[str] = None
+    severity: Severity = Severity.INFO
+    file: Optional[Path] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+    message: str = ""
+    suggestion: str = ""
+    fixable: bool = False
+    safe_fix: bool = False
+
+
+@dataclass
+class Recipe:
+    name: str = ""
+    tools: List[str] = field(default_factory=list)
+
+
+@dataclass
+class EnvironmentInfo:
+    engine_version: str = ""
+    latexmk_version: str = ""
+    biber_version: str = ""
+    platform: str = ""
+    texlive_version: Optional[str] = None
+
+
+@dataclass
+class ProjectGraphNode:
+    path: Path = Path(".")
+    node_type: str = ""
+    file_type: str = ""
+    is_main: bool = False
+    dependencies: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ProjectGraph:
+    root: Optional[Path] = None
+    nodes: List[ProjectGraphNode] = field(default_factory=list)
+    magic_comments: Dict[str, str] = field(default_factory=dict)
+
+
 @dataclass
 class OptimizerConfig:
     input: str = ""
@@ -61,6 +120,15 @@ class OptimizerConfig:
     engine: Optional[str] = None
     verbose: bool = False
     user_input: str = ""
+    build_env: BuildEnvironment = BuildEnvironment.LOCAL
+    docker_image: Optional[str] = None
+    texlive_version: Optional[str] = None
+    recipe_name: Optional[str] = None
+    config_file: Optional[str] = None
+    max_file_size: int = 104857600
+    max_log_size: int = 10485760
+    compile_timeout: int = 300
+    enable_shell_escape: bool = False
 
 
 @dataclass
@@ -69,6 +137,7 @@ class ProjectWorkspace:
     input_type: InputType = InputType.SINGLE_TEX
     original_path: Optional[str] = None
     _temp_dir: Optional[str] = None
+    security_notes: List[SecurityNote] = field(default_factory=list)
 
     @classmethod
     def create_temp(cls) -> "ProjectWorkspace":
@@ -111,6 +180,11 @@ class ProjectInfo:
     cls_files: List[Path] = field(default_factory=list)
     sty_files: List[Path] = field(default_factory=list)
     dependencies: Dict[str, List[str]] = field(default_factory=dict)
+    magic_comments: Dict[str, str] = field(default_factory=dict)
+    arara_directives: List[str] = field(default_factory=list)
+    has_latexmkrc: bool = False
+    project_graph: Optional[ProjectGraph] = None
+    environment_info: Optional[EnvironmentInfo] = None
 
 
 @dataclass
@@ -122,6 +196,25 @@ class Issue:
     line: Optional[int] = None
     recommendation: str = ""
     auto_fixed: bool = False
+    source: str = ""
+    rule: Optional[str] = None
+    column: Optional[int] = None
+    fixable: bool = False
+    safe_fix: bool = False
+
+
+@dataclass
+class Diagnostic:
+    source: str
+    rule: Optional[str] = None
+    severity: Severity = Severity.INFO
+    file: Optional[Path] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+    message: str = ""
+    suggestion: str = ""
+    fixable: bool = False
+    safe_fix: bool = False
 
 
 @dataclass
@@ -129,6 +222,8 @@ class IssueSummary:
     compile_status: bool = False
     issue_counts: Dict[Severity, int] = field(default_factory=dict)
     issues: List[Issue] = field(default_factory=list)
+    diagnostics: List[Diagnostic] = field(default_factory=list)
+    security_notes: List[SecurityNote] = field(default_factory=list)
 
 
 @dataclass
@@ -160,6 +255,7 @@ class CompileResult:
     error: str = ""
     log_analysis: Optional[LogAnalysis] = None
     pdf_path: Optional[Path] = None
+    command_used: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -187,6 +283,9 @@ class FormatResult:
     output_path: Optional[Path] = None
     stderr: str = ""
     tool_used: str = ""
+    lines_changed: int = 0
+    touched_math: bool = False
+    touched_template: bool = False
 
 
 @dataclass
@@ -195,6 +294,8 @@ class ToolSet:
     engine: str = "pdflatex"
     bib_tool: str = "bibtex"
     linters: List[str] = field(default_factory=list)
+    tectonic_available: bool = False
+    docker_available: bool = False
 
 
 @dataclass
@@ -205,3 +306,5 @@ class OptimizationResult:
     compile_result: Optional[CompileResult] = None
     output_files: Dict[str, Path] = field(default_factory=dict)
     mode_used: Optional[Mode] = None
+    environment_info: Optional[EnvironmentInfo] = None
+    security_notes: List[SecurityNote] = field(default_factory=list)

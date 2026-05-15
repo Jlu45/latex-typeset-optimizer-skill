@@ -1,6 +1,8 @@
 # LaTeX Typeset Optimizer
 
-A multi-mode LaTeX typeset optimization tool that supports single file optimization, Overleaf/LaTeX project optimization, compilation log analysis, and read-only review reports.
+> Evolving into a **LaTeX Project Diagnostic & Build Orchestrator**
+
+A multi-mode LaTeX typeset optimization tool that supports single file optimization, Overleaf/LaTeX project optimization, compilation log analysis, and read-only review reports. The next phase focuses on upgrading from a safe-fix tool to a full diagnostic and build orchestration system with stronger project graphs, standardized diagnostics, reproducible compilation environments, and CI/IDE integration.
 
 ## Features
 
@@ -147,6 +149,26 @@ Input: .tex file header
 | **LOW** | Minor issues | Underfull boxes, spacing issues |
 | **INFO** | Style suggestions | Formatting improvements |
 
+### Safe Fix Boundaries
+
+**Auto-applied at safe level:**
+- Trim trailing whitespace
+- Normalize consecutive blank lines (max 2)
+- Ensure final newline
+- Re-indent environments via latexindent
+- Remove duplicate package imports (identical options)
+- Add non-breaking spaces before `\ref`, `\cite`, `\autoref`
+
+**NEVER Auto-Fix:**
+- Math expression rewrites
+- Document class changes
+- Package replacements
+- Bibliography backend changes
+- Engine changes
+- Shell escape enabling
+- Publisher template structure modifications
+- Semantic text edits
+
 ### Workflow Details
 
 #### Single File Mode
@@ -172,6 +194,129 @@ Input: .tex file header
 8. Apply safe fixes to all files
 9. Generate project-wide diff
 10. Package as optimized-project.zip
+
+## Related Projects & Inspiration
+
+| Project | Stars / Focus | Key Takeaways |
+|---------|---------------|---------------|
+| **Overleaf** | ~17.7k, open-source collaborative LaTeX editor | Project-level thinking; sandboxed compilation is a core risk (CE lacks it) |
+| **LaTeX Workshop** | ~12.1k, VS Code LaTeX extension | Root file discovery, build recipes, multi-file dependency resolution, auto-build, problem panel, configurable formatter/linter |
+| **VimTeX** | ~6.3k, Vim/Neovim LaTeX plugin | Transparent debugging: shows actual commands and compilation output |
+| **Tectonic** | ~4.8k, modern self-contained TeX engine | Reproducible builds: auto-download support files, bundle technology, auto TeX/BibTeX loops |
+| **TexLab** | ~2k, LaTeX LSP | Diagnostics as a service: build-on-save, .fls project detection, ChkTeX on open/edit, diagnostics allow/ignore patterns |
+| **latex-action** | ~1.4k, GitHub Action for LaTeX | CI capability: containerized TeXLive, pinned versions, Alpine/Debian, multi-engine, custom fonts/packages, pre/post scripts |
+| **latexindent.pl** | ~1k, LaTeX formatter | Already used; further leverage YAML config, text wrapping, paragraph handling, regex replacements |
+| **TeXtidote** | ~1k, LaTeX spelling/grammar/style checker | Content-level review: unreferenced figures, title casing, LanguageTool integration mapped back to LaTeX source |
+| **tex-fmt** | ~802, Rust high-performance formatter | Speed & low config: .tex/.bib/.cls/.sty, extremely fast, CLI-friendly |
+| **arara** | ~414, directive-based TeX automation | In-document build directives: `% arara: pdflatex`, custom rules |
+
+## Evolution Roadmap
+
+The next phase upgrades this tool from a safe-fix optimizer into a **LaTeX Project Diagnostic & Build Orchestrator**.
+
+### v0.2: Stability First
+
+**P0: Sandboxed Compilation & Zip/Path Protection**
+- Prevent Zip Slip, absolute paths, `..`, symlink escapes when extracting zip
+- Disable shell escape by default; only report when `minted`/`gnuplottex` requires it
+- Compile in temp directory with read-only source copies, resource limits, timeouts
+- Block access to user home directory, environment variables, SSH keys
+- Disable project executables, Makefiles, pre/post scripts unless explicitly enabled
+- Add `security-notes` section to reports
+
+**P0: Project Graph & Root Detection Overhaul**
+- Support magic comments: `% !TEX root`, `% !TEX program`, `% !LW recipe`, `% arara:`
+- Parse `\input`, `\include`, `\subfile`, `\import`, `\bibliography`, `\addbibresource`, `\graphicspath`
+- Post-compile: read `.fls` to correct static dependency graph with real I/O
+- Output `project-graph.json` with root, sub-files, bib, images, cls/sty, local packages, external resources
+
+**P0: Unified Diagnostics Schema**
+- Standardized diagnostic model with `source`, `rule`, `severity`, `file`, `line`, `column`, `message`, `suggestion`, `fixable`, `safe_fix`
+- Output: `issue-summary.json`, `diagnostics.json`, `report.md`, `sarif.json` (GitHub Code Scanning), optional `annotations.md` (PR comments)
+
+**P1: Dual Formatter Backend**
+- Default: `latexindent` (compatible, YAML-configurable)
+- Fast mode: `tex-fmt` (for large projects or CI)
+- Format only changed files to avoid large diffs
+- Idempotency check: formatting twice should produce empty diff
+- Skip `minted`, `lstlisting`, `verbatim`, custom verbatim environments
+- Output "formatting risk notes": lines changed, math environment touches, template file touches
+
+**P1: Configuration File**
+- `.latex-optimizer.yaml` for project-level settings
+
+### v0.3: Ecosystem Integration
+
+**P1: Build Recipes System**
+- Support configurable build recipes (like LaTeX Workshop):
+  ```yaml
+  recipes:
+    default: latexmk-pdf
+    latexmk-pdf:
+      tools:
+        - latexmk -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+    pdflatex-bibtex:
+      tools:
+        - pdflatex
+        - bibtex
+        - pdflatex
+        - pdflatex
+  ```
+- Auto-detect: `.latexmkrc`, `latexmkrc`, arara directives, biber/bibtex, makeindex/xindy, glossaries
+- Report `minted` shell-escape requirement without enabling it
+
+**P1: Docker / Pinned TeXLive / Tectonic**
+- Three build environments:
+
+| Mode | Use Case |
+|------|----------|
+| `local` | User's existing TeXLive/MiKTeX |
+| `docker` | CI, submission reproduction, isolated compilation |
+| `tectonic` | Fast, reproducible, auto-pull dependencies for single documents |
+
+- Support `--texlive-version 2024/2025/2026/latest`
+- Support `--docker-image`
+- Record `pdflatex --version`, `latexmk --version`, `biber --version` before compile
+- Output `environment.json`
+- Cache TeXLive/Tectonic bundles
+- Preserve `compile-before.log` / `compile-after.log`
+
+**P1: CI / Pre-commit / GitHub Action Templates**
+- `.github/workflows/latex-optimizer.yml`
+- `.pre-commit-hooks.yaml`
+- `latex-optimizer-action`
+- PR comment templates
+- SARIF upload examples
+- Artifact upload: PDF, report, diff, issue-summary
+
+### v0.4: Intelligent Review
+
+**P2: Content-Level Diagnostics**
+- Unreferenced figure/table/listing
+- Duplicate labels
+- Undefined labels/citations
+- Unused bib entries
+- Title casing checks
+- Spelling/grammar checks (TeXtidote / LanguageTool integration)
+- CJK punctuation & spacing checks
+- CJK document engine/font suggestions
+- Abstract, keywords, references, appendix structure checks
+
+**P2: Advanced Reporting**
+- HTML report generation
+- PR review annotations
+- Regression corpus: Overleaf zip, arXiv source, CJK thesis, publisher templates
+- Formatting idempotency & false-modification tests
+
+### Top 5 Priority Changes
+
+| Priority | Change | Rationale |
+|----------|--------|-----------|
+| **P0** | Sandboxed compilation + zip/path protection | Baseline for project mode, especially user-uploaded zips |
+| **P0** | Project graph + root detection overhaul | Directly improves complex Overleaf project success rate |
+| **P0** | Unified diagnostics.json / SARIF | Enables reports, CI, IDE, PR comments to reuse the same results |
+| **P1** | Build recipes system | Support latexmk, pdflatex→bibtex→pdflatex, biber, makeindex, arara |
+| **P1** | Docker/Tectonic reproducible builds | Solves the classic "works on my machine" LaTeX problem |
 
 ## Installation
 
@@ -299,15 +444,6 @@ python scripts/latex_optimizer.py --input thesis.zip --engine xelatex --verbose
 | `--write-policy` | Write policy: report-only, copy, patch-only | copy |
 | `--engine` | Force specific engine: pdflatex, xelatex, lualatex | auto-detect |
 | `--verbose` | Verbose output | false |
-
-## Safe Fixes (Auto-applied at safe level)
-
-- Trim trailing whitespace
-- Normalize consecutive blank lines (max 2)
-- Ensure final newline
-- Re-indent environments via latexindent
-- Remove duplicate package imports (identical options)
-- Add non-breaking spaces before `\ref`, `\cite`, `\autoref`
 
 ## License
 
